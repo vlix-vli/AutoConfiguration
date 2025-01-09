@@ -27,7 +27,8 @@ public abstract class ConfigurationLoader
     /// Load json file
     /// </summary>
     /// <param name="settingsPath"></param>
-    public static void Load(string settingsPath)
+    /// <param name="types">type to scan</param>
+    public static void Load(string settingsPath, Type[] types)
     {
         if (_loaded)
         {
@@ -39,7 +40,7 @@ public abstract class ConfigurationLoader
             .AddJsonFile(settingsPath, optional: false, reloadOnChange: true)
             .Build();
         var serviceCollection = new ServiceCollection();
-        foreach (var type in Assembly.GetExecutingAssembly().GetTypes())
+        foreach (var type in types)
         {
             var attributes = type.GetCustomAttributes(typeof(ConfigurationAttribute), false);
             if (attributes.Length == 0) continue;

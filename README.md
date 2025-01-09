@@ -58,7 +58,7 @@ public class MyCustomTypeConverter : TypeConverter
 ```csharp
 csharp复制代码
 
-ConfigurationLoader.Load("appsettings.json");
+ConfigurationLoader.Load("appsettings.json", Assembly.GetExecutingAssembly().GetTypes());
 ```
 
 ### 5. 获取配置实例
