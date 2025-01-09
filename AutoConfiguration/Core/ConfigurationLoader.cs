@@ -16,6 +16,8 @@ public abstract class ConfigurationLoader
 {
     private static bool _loaded = false;
 
+    private static ServiceCollection? _serviceCollection;
+    
     private static ServiceProvider? _serviceProvider;
 
     /// <summary>
@@ -34,7 +36,7 @@ public abstract class ConfigurationLoader
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile(settingsPath, optional: false, reloadOnChange: true)
             .Build();
-        var serviceCollection = new ServiceCollection();
+        _serviceCollection = [];
         foreach (var type in types)
         {
             var attributes = type.GetCustomAttributes(typeof(ConfigurationAttribute), false);
@@ -47,10 +49,10 @@ public abstract class ConfigurationLoader
                 .FirstOrDefault(m =>
                     m.Name == nameof(OptionsConfigurationServiceCollectionExtensions.Configure)
                     && m.GetParameters().Length == 2)?.MakeGenericMethod(type);
-            configureMethod?.Invoke(null, [serviceCollection, configurationSection]);
+            configureMethod?.Invoke(null, [_serviceCollection, configurationSection]);
         }
 
-        _serviceProvider = serviceCollection.BuildServiceProvider();
+        _serviceProvider = _serviceCollection.BuildServiceProvider();
         CheckRequiredProperties();
         _loaded = true;
     }
@@ -78,16 +80,18 @@ public abstract class ConfigurationLoader
 
     private static void CheckRequiredProperties()
     {
-        var services = _serviceProvider?.GetServices<object>();
-        if (services == null) return;
-        foreach (var service in services)
+        var serviceDescriptors = _serviceCollection?.Where(sd => sd.ServiceType != typeof(IServiceProvider));
+        if (serviceDescriptors == null) return;
+        foreach (var descriptor in serviceDescriptors)
         {
-            var type = service.GetType();
+            var serviceInstance = _serviceProvider?.GetService(descriptor.ServiceType);
+            var type = serviceInstance?.GetType();
+            if (type == null) continue;
             foreach (var property in type.GetProperties())
             {
                 var attributes = property.GetCustomAttributes(typeof(RequiredAttribute), false);
                 if (attributes.Length == 0) continue;
-                var value = property.GetValue(service);
+                var value = property.GetValue(serviceInstance);
                 if (value == null)
                 {
                     throw new ArgumentNullException(

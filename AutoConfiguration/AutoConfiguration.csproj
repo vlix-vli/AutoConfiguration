@@ -4,7 +4,7 @@
         <TargetFramework>net8.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <PackageId>AutoConfiguration</PackageId>
-        <Version>1.0.0.2</Version>
+        <Version>1.0.0.3</Version>
         <Authors>Vli</Authors>
         <Description>Auto convert json property to instance</Description>
         <PackageTags>Util, Helper</PackageTags>
