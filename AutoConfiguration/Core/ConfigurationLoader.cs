@@ -18,11 +18,6 @@ public abstract class ConfigurationLoader
 
     private static ServiceProvider? _serviceProvider;
 
-    static ConfigurationLoader()
-    {
-        RegisterTypeConverters();
-    }
-
     /// <summary>
     /// Load json file
     /// </summary>
@@ -34,7 +29,7 @@ public abstract class ConfigurationLoader
         {
             throw new InvalidOperationException("ConfigurationLoader is already loaded");
         }
-
+        RegisterTypeConverters(types);
         var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile(settingsPath, optional: false, reloadOnChange: true)
@@ -71,9 +66,9 @@ public abstract class ConfigurationLoader
             "Configuration has not been loaded. Please call the Load method with a valid settings path before attempting to retrieve services."))
         .GetService<IOptions<T>>()?.Value;
 
-    private static void RegisterTypeConverters()
+    private static void RegisterTypeConverters(Type[] types)
     {
-        foreach (var type in Assembly.GetExecutingAssembly().GetTypes())
+        foreach (var type in types)
         {
             var attributes = type.GetCustomAttributes(typeof(TypeConverterAttribute), false);
             if (attributes.Length == 0) continue;
