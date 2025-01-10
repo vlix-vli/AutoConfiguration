@@ -16,8 +16,12 @@ public abstract class ConfigurationLoader
 {
     private static bool _loaded = false;
 
+    private static readonly List<Type> ConfigurationTypes = [];
+
+    private static readonly List<Type> TypeConverterTypes = [];
+
     private static ServiceCollection? _serviceCollection;
-    
+
     private static ServiceProvider? _serviceProvider;
 
     /// <summary>
@@ -31,19 +35,22 @@ public abstract class ConfigurationLoader
         {
             throw new InvalidOperationException("ConfigurationLoader is already loaded");
         }
-        RegisterTypeConverters(types);
+
+        Register(types);
+        foreach (var typeConverterType in TypeConverterTypes)
+        {
+            TypeDescriptor.AddAttributes(typeof(IPAddress), new TypeConverterAttribute(typeConverterType));
+        }
+
         var configuration = new ConfigurationBuilder()
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile(settingsPath, optional: false, reloadOnChange: true)
             .Build();
         _serviceCollection = [];
-        foreach (var type in types)
+        foreach (var type in ConfigurationTypes)
         {
-            var attributes = type.GetCustomAttributes(typeof(ConfigurationAttribute), false);
-            if (attributes.Length == 0) continue;
-            var configurationAttribute = (ConfigurationAttribute)attributes.First();
-            var configurationSection = configuration.GetSection(configurationAttribute.Key);
-            // CheckRequiredParameters(type, configurationAttribute.Key, configurationSection);
+            var configurationAttribute = type.GetCustomAttribute<ConfigurationAttribute>();
+            var configurationSection = configuration.GetSection(configurationAttribute!.Key);
             var configureMethod = typeof(OptionsConfigurationServiceCollectionExtensions)
                 .GetMethods(BindingFlags.Static | BindingFlags.Public)
                 .FirstOrDefault(m =>
@@ -57,6 +64,17 @@ public abstract class ConfigurationLoader
         _loaded = true;
     }
 
+    private static void Register(Type[] types)
+    {
+        foreach (var type in types)
+        {
+            var configurationAttribute = type.GetCustomAttribute<ConfigurationAttribute>();
+            if (configurationAttribute != null) ConfigurationTypes.Add(type);
+            var typeConverterAttribute = type.GetCustomAttribute<TypeConverterAttribute>();
+            if (typeConverterAttribute != null) TypeConverterTypes.Add(type);
+        }
+    }
+
     /// <summary>
     /// Get Configuration Instance
     /// </summary>
@@ -68,34 +86,23 @@ public abstract class ConfigurationLoader
             "Configuration has not been loaded. Please call the Load method with a valid settings path before attempting to retrieve services."))
         .GetService<IOptions<T>>()?.Value;
 
-    private static void RegisterTypeConverters(Type[] types)
-    {
-        foreach (var type in types)
-        {
-            var attributes = type.GetCustomAttributes(typeof(TypeConverterAttribute), false);
-            if (attributes.Length == 0) continue;
-            TypeDescriptor.AddAttributes(typeof(IPAddress), new TypeConverterAttribute(type));
-        }
-    }
-
     private static void CheckRequiredProperties()
     {
-        var serviceDescriptors = _serviceCollection?.Where(sd => sd.ServiceType != typeof(IServiceProvider));
-        if (serviceDescriptors == null) return;
-        foreach (var descriptor in serviceDescriptors)
+        foreach (var configurationType in ConfigurationTypes)
         {
-            var serviceInstance = _serviceProvider?.GetService(descriptor.ServiceType);
-            var type = serviceInstance?.GetType();
-            if (type == null) continue;
-            foreach (var property in type.GetProperties())
+            var optionsWrapperType = typeof(IOptions<>).MakeGenericType(configurationType);
+            // 根据类型获取服务实例
+            var optionsInstance = _serviceProvider?.GetService(optionsWrapperType);
+            var options = optionsInstance as IOptions<object>;
+            foreach (var property in configurationType.GetProperties())
             {
-                var attributes = property.GetCustomAttributes(typeof(RequiredAttribute), false);
-                if (attributes.Length == 0) continue;
-                var value = property.GetValue(serviceInstance);
+                var requiredAttribute = property.GetCustomAttribute<RequiredAttribute>();
+                if (requiredAttribute == null) continue;
+                var value = property.GetValue(options?.Value);
                 if (value == null)
                 {
                     throw new ArgumentNullException(
-                        $"Configuration '{type.FullName}' is missing a required valid '{property.Name}' property.");
+                        $"Configuration '{configurationType.FullName}' is missing a required valid '{property.Name}' property.");
                 }
             }
         }
